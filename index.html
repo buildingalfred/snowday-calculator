@@ -1,0 +1,120 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Snow Day Calculator | Live Forecast</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      background-color: #f6f9fc;
+      margin: 0;
+      padding: 0;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: start;
+      min-height: 100vh;
+      padding-top: 60px;
+    }
+    h1 {
+      color: #004080;
+    }
+    form {
+      margin: 20px 0;
+    }
+    input[type="text"] {
+      padding: 10px;
+      font-size: 16px;
+      width: 200px;
+      border-radius: 5px;
+      border: 1px solid #ccc;
+    }
+    button {
+      padding: 10px 20px;
+      font-size: 16px;
+      background: #008cff;
+      color: white;
+      border: none;
+      border-radius: 5px;
+      margin-left: 10px;
+      cursor: pointer;
+    }
+    button:hover {
+      background: #0070cc;
+    }
+    #result {
+      margin-top: 30px;
+      font-size: 20px;
+      color: #333;
+      text-align: center;
+      max-width: 80%;
+    }
+  </style>
+</head>
+<body>
+  <h1>Snow Day Calculator</h1>
+  <p>What are the chances of a snow day tomorrow?</p>
+  <form id="zip-form">
+    <input type="text" id="zip" placeholder="Enter ZIP Code" required />
+    <button type="submit">Check</button>
+  </form>
+  <div id="result"></div>
+
+  <script>
+    document.getElementById("zip-form").addEventListener("submit", async function (event) {
+      event.preventDefault();
+      const zip = document.getElementById("zip").value.trim();
+      const resultDiv = document.getElementById("result");
+
+      if (!zip.match(/^\d{5}$/)) {
+        resultDiv.textContent = "Please enter a valid 5-digit ZIP code.";
+        return;
+      }
+
+      resultDiv.textContent = "Checking conditions...";
+
+      try {
+        const geoRes = await fetch(`https://api.zippopotam.us/us/${zip}`);
+        if (!geoRes.ok) throw new Error("ZIP not found");
+        const geoData = await geoRes.json();
+        const lat = geoData.places[0].latitude;
+        const lon = geoData.places[0].longitude;
+        const city = geoData.places[0]["place name"];
+        const state = geoData.places[0]["state abbreviation"];
+
+        const weatherRes = await fetch(
+          `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&hourly=snowfall,temperature_2m,windspeed_10m&timezone=auto`
+        );
+        const weatherData = await weatherRes.json();
+
+        const now = new Date();
+        const tomorrow = new Date(now);
+        tomorrow.setDate(now.getDate() + 1);
+        tomorrow.setHours(7, 0, 0, 0);
+        const targetHour = tomorrow.toISOString().slice(0, 13);
+
+        const hourIndex = weatherData.hourly.time.findIndex(t => t.startsWith(targetHour));
+        const snow = weatherData.hourly.snowfall[hourIndex] || 0;
+        const temp = weatherData.hourly.temperature_2m[hourIndex] || 0;
+        const wind = weatherData.hourly.windspeed_10m[hourIndex] || 0;
+
+        function calculateSnowDayChance(snowInches, tempF, windMph) {
+          let score = 0;
+          if (snowInches >= 3) score += 40;
+          if (tempF < -4) score += 20;
+          if (windMph > 25) score += 10;
+          score += (snowInches > 0 && tempF < 1) ? 10 : 0;
+          return Math.min(score, 100);
+        }
+
+        const chance = calculateSnowDayChance(snow, temp, wind);
+        resultDiv.textContent = `${chance}% chance of a snow day tomorrow in ${city}, ${state} (${zip})`;
+      } catch (error) {
+        resultDiv.textContent = "Something went wrong: " + error.message;
+      }
+    });
+  </script>
+</body>
+</html>
